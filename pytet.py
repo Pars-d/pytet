@@ -12,6 +12,13 @@ pg.time.set_timer(MOVE_DOWN, 1000)
 
 class Mino(pg.sprite.Sprite):
     SIZE = 30  # Width of one cell in pixels
+    def make_previewCells(x):
+        ret = [pg.Surface((x, x), pg.SRCALPHA, depth=32) for i in range(4)]
+        for i in range(4):
+            pg.draw.rect(ret[i], pg.Color('mediumpurple'), (5, 5, x-10, x-10), width=2)
+        return ret
+    previewCells = make_previewCells(SIZE)  # 4 cells that show drop preview
+
 
     class Shape(Enum):
         I, O, T, J, L, S, Z = auto(), auto(), auto(), auto(), auto(), auto(), auto()
@@ -47,7 +54,8 @@ class Mino(pg.sprite.Sprite):
         super().__init__()
         
         # Instance Variables
-        self.shape = random.choice(list(Mino.Shape))
+        # self.shape = random.choice(list(Mino.Shape))
+        self.shape = Mino.Shape.I
         self.coordDict = Mino.dictMap[self.shape]
 
         self.x, self.y, self.rot = x, y, 0
@@ -55,7 +63,20 @@ class Mino(pg.sprite.Sprite):
         self.cellsPos = self.coordDict[self.rot]   # Quicker access to coordinates, Make sure to update on rotation
 
         for cell in self.cells:
-            cell.fill(pg.Color('palegreen3'))
+            if self.shape == Mino.Shape.I:
+                cell.fill(pg.Color('cadetblue2'))
+            elif self.shape == Mino.Shape.O:
+                cell.fill(pg.Color('yellow2'))
+            elif self.shape == Mino.Shape.T:
+                cell.fill(pg.Color('thistle3'))
+            elif self.shape == Mino.Shape.J:
+                cell.fill(pg.Color('royalblue1'))
+            elif self.shape == Mino.Shape.L:
+                cell.fill(pg.Color('orange1'))
+            elif self.shape == Mino.Shape.S:
+                cell.fill(pg.Color('palegreen3'))
+            elif self.shape == Mino.Shape.Z:
+                cell.fill(pg.Color('brown2'))
             pg.draw.rect(cell, pg.Color('plum4'), (0, 0, self.SIZE, self.SIZE), width=3)
 
 
@@ -64,24 +85,37 @@ class Mino(pg.sprite.Sprite):
         def mLeft():
             for pos in self.cellsPos:
                 if (self.x + pos[0] < 1 
-                  or field.posOccupied[self.x + pos[0] - 1][self.y + pos[1]] is not None):
+                  or (self.y + pos[1] > 0
+                  and field.posOccupied[self.x + pos[0] - 1][self.y + pos[1]] is not None)):
                     return
             self.x += -1
     
         def mRight():
             for pos in self.cellsPos:
                 if (self.x + pos[0] > Playfield.WIDTH - 2 
-                  or field.posOccupied[self.x + pos[0] + 1][self.y + pos[1]] is not None):
+                  or (self.y + pos[1] > 0 
+                  and field.posOccupied[self.x + pos[0] + 1][self.y + pos[1]] is not None)):
                     return
             self.x += 1
 
-        def mDown():
+        def mDown():  # Soft drop
             for pos in self.cellsPos:
                 if (self.y + pos[1] > Playfield.HEIGHT - 2 
-                  or field.posOccupied[self.x + pos[0]][self.y + pos[1] + 1] is not None):
+                  or (self.y + pos[1] > 0 
+                  and field.posOccupied[self.x + pos[0]][self.y + pos[1] + 1] is not None)):
                     pg.event.post(e_NEW_MINO)
                     return
             self.y += 1
+        
+        def mDrop():  # Hard drop
+            while 1:
+                for pos in self.cellsPos:
+                    if (self.y + pos[1] > Playfield.HEIGHT - 2 
+                      or (self.y + pos[1] > 0 
+                      and field.posOccupied[self.x + pos[0]][self.y + pos[1] + 1] is not None)):
+                        pg.event.post(e_NEW_MINO)
+                        return
+                self.y += 1
 
         # Rotation
         def rotate(cWise: bool):   # cWise = true for clockwise, false for anticlockwise
@@ -99,7 +133,8 @@ class Mino(pg.sprite.Sprite):
             for pos in self.coordDict[t_rot]:
                 if (self.x + pos[0] < 0 or self.x + pos[0] > Playfield.WIDTH - 1
                   or self.y + pos[1] > Playfield.HEIGHT - 1
-                  or field.posOccupied[self.x + pos[0]][self.y + pos[1]] is not None):
+                  or (self.y + pos[1] >= 0 
+                  and field.posOccupied[self.x + pos[0]][self.y + pos[1]] is not None)):
                     return
             
             self.rot = t_rot
@@ -113,7 +148,9 @@ class Mino(pg.sprite.Sprite):
                     mLeft()
                 if event.key == pg.K_RIGHT:
                     mRight()
-                if event.key == pg.K_DOWN:
+                if event.key == pg.K_SPACE:
+                    mDrop()
+                elif event.key == pg.K_DOWN:
                     mDown()
                 if event.key == pg.K_z:
                     rotate(False)
@@ -129,6 +166,23 @@ class Mino(pg.sprite.Sprite):
               ((self.x + self.cellsPos[i][0]) * Mino.SIZE, 
               (self.y + self.cellsPos[i][1]) * Mino.SIZE) )
 
+    def drawPreview(self, field):
+        pre_y = self.y
+        b = True
+        while b:
+            for pos in self.cellsPos:
+                if (pre_y + pos[1] > Playfield.HEIGHT - 2 
+                or field.posOccupied[self.x + pos[0]][pre_y + pos[1] + 1] is not None):
+                    b = False
+                    break
+            else:
+                pre_y += 1
+
+        for i in range(4):
+            field.field.blit( Mino.previewCells[i], 
+              ((self.x + self.cellsPos[i][0]) * Mino.SIZE, 
+              (pre_y + self.cellsPos[i][1]) * Mino.SIZE) )
+
 
 class Playfield(pg.sprite.Sprite):
     WIDTH = 10  # in cells
@@ -139,21 +193,33 @@ class Playfield(pg.sprite.Sprite):
         self.surf = pg.Surface((Playfield.WIDTH * Mino.SIZE + 10, Playfield.HEIGHT * Mino.SIZE + 5))
         self.field = self.surf.subsurface((5, 0, Playfield.WIDTH * Mino.SIZE, Playfield.HEIGHT * Mino.SIZE))
         self.posOccupied = [ [None]*Playfield.HEIGHT for i in range(Playfield.WIDTH) ]  # Stores surfaces for occupied spots
+        self.score = 0
         
         self.surf.fill(pg.Color('black'))
         self.field.fill(pg.Color('grey60'))
 
-    def chkLine(self, mino):  # Clears line if filled
+    def chkLine(self, mino):  # Clears line if filled and updates score
         rows = sorted({mino.y + pos[1] for pos in mino.cellsPos})
+        cleared_lines = 0
         for y in rows:
             for x in range(Playfield.WIDTH):
                 if self.posOccupied[x][y] is None:
                     break
             else:  # Only runs if line is full
+                cleared_lines += 1
                 # Down shift all above lines
                 for line in reversed(range(y)):
                     for x2 in range(Playfield.WIDTH):
                         self.posOccupied[x2][line + 1] = self.posOccupied[x2][line]
+        
+        if cleared_lines == 1:
+            self.score += 40
+        elif cleared_lines == 2:
+            self.score += 100
+        elif cleared_lines == 3:
+            self.score += 300
+        elif cleared_lines == 4:
+            self.score += 1200
 
     def update_posOccupied(self, mino):
         for cell, pos in zip(mino.cells, mino.cellsPos):  # Adds current mino to posOccupied
@@ -180,6 +246,16 @@ def main():
     SCREEN = pg.display.set_mode((800,800))
     SCREEN.fill(pg.Color('grey80'))
 
+    font = pg.font.SysFont('Calibri', 25)
+    lbl_controls = [ font.render(s, True, pg.Color('black')) for s in
+      ['Move left: Left', 'Move right: Right', 'Soft drop: Down',
+      'Hard drop: Space', 'Turn left: Z', 'Turn right: X'] ]
+    for i, lbl in enumerate(lbl_controls):
+        SCREEN.blit(lbl, (10, 10 + 30*i)) 
+    
+    # lbl_score = font.render(f'Score: ', True, pg.Color('black'))
+    # SCREEN.blit(lbl_score, (370, 10))
+
     p = Playfield()
 
     m1 = Mino(5, 0)
@@ -192,9 +268,14 @@ def main():
         m1.move(p)
 
         p.draw()
+        m1.drawPreview(p)
         m1.draw(p.field)
 
-        SCREEN.blit(p.surf, (200, 50))
+        lbl_score2 = font.render(f'Score: {p.score}', True, pg.Color('black'))
+        SCREEN.fill(pg.Color('grey80'), (370, 10, lbl_score2.get_width(), lbl_score2.get_height()))
+        SCREEN.blit(lbl_score2, (370, 10))
+
+        SCREEN.blit(p.surf, (250, 50))
 
         # Event Handler 
         for event in pg.event.get():
