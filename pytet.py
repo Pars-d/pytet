@@ -2,13 +2,17 @@ import pygame as pg
 import random
 from enum import Enum, auto
 
+pg.init()
+FPS = 75
+FramePerSec = pg.time.Clock()
+
 # Defined Events
 MOVE_DOWN = pg.USEREVENT + 1
 NEW_MINO = pg.USEREVENT + 2
 e_NEW_MINO = pg.event.Event(NEW_MINO)
 
 # Event Timers
-pg.time.set_timer(MOVE_DOWN, 1000)
+pg.time.set_timer(MOVE_DOWN, 1000)  # Delay between mino fall
 
 class Mino(pg.sprite.Sprite):
     SIZE = 30  # Width of one cell in pixels
@@ -56,8 +60,7 @@ class Mino(pg.sprite.Sprite):
         super().__init__()
         
         # Instance Variables
-        # self.shape = random.choice(list(Mino.Shape))
-        self.shape = Mino.Shape.I
+        self.shape = random.choice(list(Mino.Shape))
         self.coordDict = Mino.dictMap[self.shape]
 
         self.x, self.y, self.rot = x, y, 0
@@ -190,12 +193,20 @@ class Playfield(pg.sprite.Sprite):
     WIDTH = 10  # in cells
     HEIGHT = 20
 
+    # Create game over lbl
+    font = pg.font.SysFont('Calibri', 25)
+    lbl_gameover = font.render('Game Over', True, pg.Color('black'))
+    
     def __init__(self):
         # Instance Variables
         self.surf = pg.Surface((Playfield.WIDTH * Mino.DRAW_POS + 10, Playfield.HEIGHT * Mino.DRAW_POS + 5))
         self.field = self.surf.subsurface((5, 0, Playfield.WIDTH * Mino.DRAW_POS, Playfield.HEIGHT * Mino.DRAW_POS))
         self.posOccupied = [ [None]*Playfield.HEIGHT for i in range(Playfield.WIDTH) ]  # Stores surfaces for occupied spots
         self.score = 0
+        self.game_over = False
+        self.rect_gameover = pg.Rect((self.field.get_width() - Playfield.lbl_gameover.get_width()) // 2, 
+          (self.field.get_height() - Playfield.lbl_gameover.get_height()) // 2,
+          Playfield.lbl_gameover.get_width() + 15, Playfield.lbl_gameover.get_height() + 5)
         
         self.surf.fill(pg.Color('black'))
 
@@ -243,19 +254,21 @@ class Playfield(pg.sprite.Sprite):
             for y, cell in enumerate(row):
                 if cell is not None:
                     self.field.blit(cell, (x * Mino.DRAW_POS + Mino.SPACE, y * Mino.DRAW_POS + Mino.SPACE))
+        
+        # Draw game over
+        if self.game_over:
+            pg.draw.rect(self.field, pg.Color('firebrick'), self.rect_gameover)
+            self.field.blit( Playfield.lbl_gameover, (self.rect_gameover.centerx - Playfield.lbl_gameover.get_width() // 2, 
+              self.rect_gameover.centery - Playfield.lbl_gameover.get_height() // 2) )
 
 
 def main():
-    pg.init()
-
-    FPS = 60
-    FramePerSec = pg.time.Clock()
-
     pg.display.set_caption("game")
      
     SCREEN = pg.display.set_mode((800,800))
     SCREEN.fill(pg.Color('grey80'))
 
+    # Display controls
     font = pg.font.SysFont('Calibri', 25)
     lbl_controls = [ font.render(s, True, pg.Color('black')) for s in
       ['Move left: Left', 'Move right: Right', 'Soft drop: Down',
@@ -263,37 +276,65 @@ def main():
     for i, lbl in enumerate(lbl_controls):
         SCREEN.blit(lbl, (10, 10 + 30*i)) 
     
-    # lbl_score = font.render(f'Score: ', True, pg.Color('black'))
-    # SCREEN.blit(lbl_score, (370, 10))
+    # Display start button
+    b_start = pg.Rect(10, 300, 100, 30)
+    lbl_start = font.render('Start', True, pg.Color('black'))
+    lbl_go = font.render('Go!', True, pg.Color('springgreen4'))
+    pg.draw.rect(SCREEN, pg.Color('mediumpurple3'), b_start, width=3)
+    SCREEN.blit(lbl_start, (b_start.centerx - lbl_start.get_width() // 2, b_start.centery - lbl_start.get_height() // 2))
 
     p = Playfield()
-
     m1 = Mino(5, 0)
-    
 
-    running = True
+    SCREEN.blit(p.surf, (250, 50))
+
+    exe_run = True
+    game_run = False
     # main loop
-    while running:
+    while exe_run:
         
-        m1.move(p)
-
         p.draw()
-        m1.drawPreview(p)
-        m1.draw(p.field)
 
-        lbl_score2 = font.render(f'Score: {p.score}', True, pg.Color('black'))
-        SCREEN.fill(pg.Color('grey80'), (370, 10, lbl_score2.get_width(), lbl_score2.get_height()))
-        SCREEN.blit(lbl_score2, (370, 10))
+        if game_run:
+            m1.move(p)
+            m1.drawPreview(p)
+            m1.draw(p.field)
 
+            lbl_score = font.render(f'Score: {p.score}', True, pg.Color('black'))
+            SCREEN.fill(pg.Color('grey80'), (370, 10, lbl_score.get_width(), lbl_score.get_height()))
+            SCREEN.blit(lbl_score, (370, 10))
+        
         SCREEN.blit(p.surf, (250, 50))
 
         # Event Handler 
         for event in pg.event.get():
+            if event.type == pg.QUIT:
+                exe_run = False
+
+            # Spawn new mino
             if event.type == NEW_MINO:
                 p.update_posOccupied(m1)
                 m1 = Mino(5, 0)
-            if event.type == pg.QUIT:
-                running = False
+                # Check for game over
+                for pos in m1.cellsPos:
+                    if p.posOccupied[m1.x + pos[0]][m1.y + pos[1]] is not None:
+                        game_run = False
+                        p.game_over = True
+                        pg.draw.rect(SCREEN, pg.Color('grey80'), b_start)
+                        pg.draw.rect(SCREEN, pg.Color('mediumpurple3'), b_start, width=3)
+                        SCREEN.blit(lbl_start, (b_start.centerx - lbl_start.get_width() // 2, b_start.centery - lbl_start.get_height() // 2))
+                        break
+
+            # b_start clicked
+            if not game_run and event.type == pg.MOUSEBUTTONDOWN:
+                m_pos = event.pos
+                if b_start.collidepoint(m_pos):                    
+                    p = Playfield()
+                    game_run = True
+                    pg.draw.rect(SCREEN, pg.Color('grey80'), b_start)
+                    pg.draw.rect(SCREEN, pg.Color('mediumpurple3'), b_start, width=3)
+                    SCREEN.blit(lbl_go, (b_start.centerx - lbl_go.get_width() // 2, b_start.centery - lbl_go.get_height() // 2))
+
 
         pg.display.update()
         FramePerSec.tick(FPS)
