@@ -12,6 +12,8 @@ pg.time.set_timer(MOVE_DOWN, 1000)
 
 class Mino(pg.sprite.Sprite):
     SIZE = 30  # Width of one cell in pixels
+    SPACE = 2  # Width of grid lines
+    DRAW_POS = SIZE + SPACE  # Constant for determining where to draw
     def make_previewCells(x):
         ret = [pg.Surface((x, x), pg.SRCALPHA, depth=32) for i in range(4)]
         for i in range(4):
@@ -163,8 +165,8 @@ class Mino(pg.sprite.Sprite):
     def draw(self, surface):
         for i in range(4):
             surface.blit( self.cells[i], 
-              ((self.x + self.cellsPos[i][0]) * Mino.SIZE, 
-              (self.y + self.cellsPos[i][1]) * Mino.SIZE) )
+              ( (self.x + self.cellsPos[i][0]) * Mino.DRAW_POS + Mino.SPACE, 
+              (self.y + self.cellsPos[i][1]) * Mino.DRAW_POS + Mino.SPACE) )
 
     def drawPreview(self, field):
         pre_y = self.y
@@ -180,8 +182,8 @@ class Mino(pg.sprite.Sprite):
 
         for i in range(4):
             field.field.blit( Mino.previewCells[i], 
-              ((self.x + self.cellsPos[i][0]) * Mino.SIZE, 
-              (pre_y + self.cellsPos[i][1]) * Mino.SIZE) )
+              ( (self.x + self.cellsPos[i][0]) * Mino.DRAW_POS + Mino.SPACE, 
+              (pre_y + self.cellsPos[i][1]) * Mino.DRAW_POS + Mino.SPACE) )
 
 
 class Playfield(pg.sprite.Sprite):
@@ -190,13 +192,12 @@ class Playfield(pg.sprite.Sprite):
 
     def __init__(self):
         # Instance Variables
-        self.surf = pg.Surface((Playfield.WIDTH * Mino.SIZE + 10, Playfield.HEIGHT * Mino.SIZE + 5))
-        self.field = self.surf.subsurface((5, 0, Playfield.WIDTH * Mino.SIZE, Playfield.HEIGHT * Mino.SIZE))
+        self.surf = pg.Surface((Playfield.WIDTH * Mino.DRAW_POS + 10, Playfield.HEIGHT * Mino.DRAW_POS + 5))
+        self.field = self.surf.subsurface((5, 0, Playfield.WIDTH * Mino.DRAW_POS, Playfield.HEIGHT * Mino.DRAW_POS))
         self.posOccupied = [ [None]*Playfield.HEIGHT for i in range(Playfield.WIDTH) ]  # Stores surfaces for occupied spots
         self.score = 0
         
         self.surf.fill(pg.Color('black'))
-        self.field.fill(pg.Color('grey60'))
 
     def chkLine(self, mino):  # Clears line if filled and updates score
         rows = sorted({mino.y + pos[1] for pos in mino.cellsPos})
@@ -228,11 +229,20 @@ class Playfield(pg.sprite.Sprite):
         self.chkLine(mino)
 
     def draw(self):
+        # Draw field background & grid
         self.field.fill(pg.Color('grey60'))
+        for col in range(1, Playfield.WIDTH):
+            pg.draw.line(self.field, pg.Color('dimgrey'), 
+              (Mino.DRAW_POS * col, 0), (Mino.DRAW_POS * col, Mino.DRAW_POS * Playfield.HEIGHT), Mino.SPACE)
+        for row in range(1, Playfield.HEIGHT):
+            pg.draw.line(self.field, pg.Color('dimgrey'), 
+              (0, Mino.DRAW_POS * row), (Mino.DRAW_POS * Playfield.WIDTH, Mino.DRAW_POS * row), Mino.SPACE)
+
+        # Draw occupied cells
         for x, row in enumerate(self.posOccupied):
             for y, cell in enumerate(row):
                 if cell is not None:
-                    self.field.blit(cell, (x * Mino.SIZE, y * Mino.SIZE))
+                    self.field.blit(cell, (x * Mino.DRAW_POS + Mino.SPACE, y * Mino.DRAW_POS + Mino.SPACE))
 
 
 def main():
